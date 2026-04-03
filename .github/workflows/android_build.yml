@@ -1,9 +1,20 @@
-name: Build Custom Auxio
+name: Build Custom Auxio (Manual Form)
 
 on:
-  push:
-    branches: [ "main", "master" ]
   workflow_dispatch:
+    inputs:
+      app_name:
+        description: 'Nama Aplikasi (Contoh: Musik Sasak Offline)'
+        required: true
+        default: 'Musik Sasak'
+      package_name:
+        description: 'Package Name (Contoh: com.ojgrup.musiksasak)'
+        required: true
+        default: 'com.ojgrup.musiksasak'
+      icon_path:
+        description: 'Nama file icon di folder assets (Contoh: icon.png)'
+        required: false
+        default: 'icon.png'
 
 jobs:
   build:
@@ -19,26 +30,26 @@ jobs:
           distribution: 'temurin'
           cache: 'gradle'
 
-      - name: Customize App Metadata
+      - name: Customize App from Form
         run: |
-          # 1. TEMPAT INPUT NAMA APLIKASI
-          # Ganti "Musik Sasak Offline" dengan nama yang Anda mau
-          APP_NAME="Musik Sasak Offline"
-          sed -i "s/name=\"app_name\">Auxio/name=\"app_name\">$APP_NAME/g" app/src/main/res/values/strings.xml
+          # Ambil data dari Form Input
+          NAME="${{ github.event.inputs.app_name }}"
+          PACKAGE="${{ github.event.inputs.package_name }}"
+          ICON="${{ github.event.inputs.icon_path }}"
+
+          echo "Mengubah nama menjadi: $NAME"
+          sed -i "s/name=\"app_name\">Auxio/name=\"app_name\">$NAME/g" app/src/main/res/values/strings.xml
           
-          # 2. TEMPAT INPUT PACKAGE NAME
-          # Ganti "com.ojgrup.musiksasak" dengan id aplikasi Anda (tanpa spasi)
-          PACKAGE_NAME="com.ojgrup.musiksasak"
-          sed -i "s/applicationId \"org.oxycblt.auxio\"/applicationId \"$PACKAGE_NAME\"/g" app/build.gradle
+          echo "Mengubah package menjadi: $PACKAGE"
+          sed -i "s/applicationId \"org.oxycblt.auxio\"/applicationId \"$PACKAGE\"/g" app/build.gradle
           
-          # 3. TEMPAT INPUT ICON (Logika Otomatis)
-          # Pastikan Anda sudah mengupload file bernama "icon.png" ke folder "assets" di Github Anda
-          if [ -f "assets/icon.png" ]; then
-            cp -f assets/icon.png app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
-            cp -f assets/icon.png app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png
-            echo "Icon berhasil diganti!"
+          # Cek file icon di folder assets
+          if [ -f "assets/$ICON" ]; then
+            echo "Mengganti icon menggunakan assets/$ICON"
+            cp -f "assets/$ICON" app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+            cp -f "assets/$ICON" app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png
           else
-            echo "File assets/icon.png tidak ditemukan, menggunakan icon default."
+            echo "Icon $ICON tidak ditemukan di folder assets, pakai default."
           fi
           
           chmod +x gradlew
@@ -49,11 +60,11 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Hasil-APK
+          name: ${{ github.event.inputs.app_name }}-APK
           path: app/build/outputs/apk/debug/*.apk
 
       - name: Upload AAB
         uses: actions/upload-artifact@v4
         with:
-          name: Hasil-AAB
+          name: ${{ github.event.inputs.app_name }}-AAB
           path: app/build/outputs/bundle/debug/*.aab
