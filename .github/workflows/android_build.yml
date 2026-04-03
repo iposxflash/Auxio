@@ -1,35 +1,54 @@
-name: Android CI
+name: Build Auxio APK and AAB
 
 on:
   push:
-    branches: [ "main", "master" ] # Sesuaikan dengan nama branch utama Anda
-  pull_request:
     branches: [ "main", "master" ]
-  workflow_dispatch: # Memungkinkan menjalankan build secara manual
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-        cache: 'gradle'
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
 
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
+      - name: Customize App Metadata
+        run: |
+          # 1. Ganti Nama Aplikasi
+          sed -i 's/name="app_name">Auxio/name="app_name">Musik Sasak/g' app/src/main/res/values/strings.xml
+          
+          # 2. Ganti Package Name
+          # Pastikan file build.gradle menggunakan tanda kutip dua atau satu yang sesuai
+          sed -i 's/applicationId "org.oxycblt.auxio"/applicationId "com.sasak.musik.offline"/g' app/build.gradle
+          
+          # 3. Ganti Icon (Jika file icon.png ada di folder assets)
+          # Perintah ini akan menimpa icon default
+          if [ -f "assets/icon.png" ]; then
+            cp -f assets/icon.png app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+            cp -f assets/icon.png app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png
+          fi
+          
+          chmod +x gradlew
 
-    - name: Build Debug APK
-      run: ./gradlew assembleDebug
+      - name: Build APK and AAB
+        # assembleDebug menghasilkan APK, bundleDebug menghasilkan AAB
+        run: ./gradlew assembleDebug bundleDebug
 
-    - name: Upload APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: auxio-debug-apk
-        path: app/build/outputs/apk/debug/*.apk
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: App-Debug-APK
+          path: app/build/outputs/apk/debug/*.apk
+
+      - name: Upload AAB Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: App-Debug-AAB
+          path: app/build/outputs/bundle/debug/*.aab
