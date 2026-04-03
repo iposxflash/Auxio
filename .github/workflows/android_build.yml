@@ -1,4 +1,4 @@
-name: Build Auxio APK and AAB
+name: Build Custom Auxio
 
 on:
   push:
@@ -21,34 +21,39 @@ jobs:
 
       - name: Customize App Metadata
         run: |
-          # 1. Ganti Nama Aplikasi
-          sed -i 's/name="app_name">Auxio/name="app_name">Musik Sasak/g' app/src/main/res/values/strings.xml
+          # 1. TEMPAT INPUT NAMA APLIKASI
+          # Ganti "Musik Sasak Offline" dengan nama yang Anda mau
+          APP_NAME="Musik Sasak Offline"
+          sed -i "s/name=\"app_name\">Auxio/name=\"app_name\">$APP_NAME/g" app/src/main/res/values/strings.xml
           
-          # 2. Ganti Package Name
-          # Pastikan file build.gradle menggunakan tanda kutip dua atau satu yang sesuai
-          sed -i 's/applicationId "org.oxycblt.auxio"/applicationId "com.sasak.musik.offline"/g' app/build.gradle
+          # 2. TEMPAT INPUT PACKAGE NAME
+          # Ganti "com.ojgrup.musiksasak" dengan id aplikasi Anda (tanpa spasi)
+          PACKAGE_NAME="com.ojgrup.musiksasak"
+          sed -i "s/applicationId \"org.oxycblt.auxio\"/applicationId \"$PACKAGE_NAME\"/g" app/build.gradle
           
-          # 3. Ganti Icon (Jika file icon.png ada di folder assets)
-          # Perintah ini akan menimpa icon default
+          # 3. TEMPAT INPUT ICON (Logika Otomatis)
+          # Pastikan Anda sudah mengupload file bernama "icon.png" ke folder "assets" di Github Anda
           if [ -f "assets/icon.png" ]; then
             cp -f assets/icon.png app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
             cp -f assets/icon.png app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png
+            echo "Icon berhasil diganti!"
+          else
+            echo "File assets/icon.png tidak ditemukan, menggunakan icon default."
           fi
           
           chmod +x gradlew
 
-      - name: Build APK and AAB
-        # assembleDebug menghasilkan APK, bundleDebug menghasilkan AAB
+      - name: Build APK & AAB
         run: ./gradlew assembleDebug bundleDebug
 
-      - name: Upload APK Artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: App-Debug-APK
+          name: Hasil-APK
           path: app/build/outputs/apk/debug/*.apk
 
-      - name: Upload AAB Artifact
+      - name: Upload AAB
         uses: actions/upload-artifact@v4
         with:
-          name: App-Debug-AAB
+          name: Hasil-AAB
           path: app/build/outputs/bundle/debug/*.aab
