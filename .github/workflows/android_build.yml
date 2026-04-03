@@ -30,40 +30,52 @@ jobs:
           distribution: 'temurin'
           cache: 'gradle'
 
-      - name: Customize App from Form
+      - name: Customize App Metadata
         run: |
-          # Ambil data dari Form Input
+          # 1. Ambil data dari Form Input
           NAME="${{ github.event.inputs.app_name }}"
           PACKAGE="${{ github.event.inputs.package_name }}"
           ICON="${{ github.event.inputs.icon_path }}"
 
-          echo "Mengubah nama menjadi: $NAME"
-          sed -i "s/name=\"app_name\">Auxio/name=\"app_name\">$NAME/g" app/src/main/res/values/strings.xml
+          echo "--- KONFIGURASI BARU ---"
+          echo "Nama Aplikasi: $NAME"
+          echo "Package Name : $PACKAGE"
+          echo "File Icon    : assets/$ICON"
+          echo "-----------------------"
+
+          # 2. Ubah Nama Aplikasi di strings.xml
+          # Menggunakan regex yang lebih kuat untuk mencari tag app_name
+          sed -i "s/<string name=\"app_name\">.*<\/string>/<string name=\"app_name\">$NAME<\/string>/g" app/src/main/res/values/strings.xml
           
-          echo "Mengubah package menjadi: $PACKAGE"
+          # 3. Ubah Package Name di app/build.gradle
           sed -i "s/applicationId \"org.oxycblt.auxio\"/applicationId \"$PACKAGE\"/g" app/build.gradle
           
-          # Cek file icon di folder assets
+          # 4. Ganti Icon di semua resolusi folder res
           if [ -f "assets/$ICON" ]; then
-            echo "Mengganti icon menggunakan assets/$ICON"
-            cp -f "assets/$ICON" app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
-            cp -f "assets/$ICON" app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png
+            echo "Proses mengganti icon..."
+            for folder in mipmap-mdpi mipmap-hdpi mipmap-xhdpi mipmap-xxhdpi mipmap-xxxhdpi; do
+              cp -f "assets/$ICON" "app/src/main/res/$folder/ic_launcher.png"
+              cp -f "assets/$ICON" "app/src/main/res/$folder/ic_launcher_round.png"
+            done
+            echo "Icon berhasil diperbarui di semua folder mipmap."
           else
-            echo "Icon $ICON tidak ditemukan di folder assets, pakai default."
+            echo "PERINGATAN: assets/$ICON tidak ditemukan. Menggunakan icon bawaan."
           fi
           
+          # 5. Berikan izin eksekusi ke gradlew
           chmod +x gradlew
 
-      - name: Build APK & AAB
-        run: ./gradlew assembleDebug bundleDebug
+      - name: Build APK and AAB
+        # assembleDebug = APK, bundleDebug = AAB
+        run: ./gradlew assembleDebug bundleDebug --stacktrace
 
-      - name: Upload APK
+      - name: Upload APK Result
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.event.inputs.app_name }}-APK
           path: app/build/outputs/apk/debug/*.apk
 
-      - name: Upload AAB
+      - name: Upload AAB Result
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.event.inputs.app_name }}-AAB
