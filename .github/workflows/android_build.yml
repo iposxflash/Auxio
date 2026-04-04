@@ -32,33 +32,33 @@ jobs:
           distribution: 'temurin'
           cache: 'gradle'
 
-      - name: Deep Clean & Force Customization
+      - name: Force Clean & Reset Settings
         run: |
           NAME="${{ github.event.inputs.app_name }}"
           PACKAGE="${{ github.event.inputs.package_name }}"
           ICON="${{ github.event.inputs.icon_path }}"
 
-          # 1. BERSIHKAN SEMUA REFERENSI MODUL RUSAK (FFMPEG & TAGLIB)
-          # Hapus dari settings.gradle
-          sed -i "/decoder-ffmpeg/d" settings.gradle || true
-          sed -i "/decoder_ffmpeg/d" settings.gradle || true
-          sed -i "/musikr/d" settings.gradle || true
-          
-          # 2. PAKSA HAPUS DEPENDENSI DI SEMUA BUILD.GRADLE
-          # Ini agar Dagger Hilt/KSP tidak mencari kelas yang hilang
-          find . -name "build.gradle" -exec sed -i "/:musikr/d" {} +
-          find . -name "build.gradle" -exec sed -i "/decoder-ffmpeg/d" {} +
-          find . -name "build.gradle" -exec sed -i "/decoder_ffmpeg/d" {} +
+          # 1. RESET TOTAL SETTINGS.GRADLE (Menghilangkan error baris 22)
+          # Kita buat file settings.gradle baru yang hanya berisi folder app
+          echo "rootProject.name = 'Auxio'" > settings.gradle
+          echo "include ':app'" >> settings.gradle
+          echo "Settings.gradle has been reset to minimal."
 
-          # 3. GANTI PACKAGE NAME DI APP
+          # 2. BERSIHKAN DEPENDENSI DI APP/BUILD.GRADLE
+          # Karena modul lain dibuang, kita harus hapus panggilannya di dalam app
           if [ -f "app/build.gradle" ]; then
+            sed -i "/project(':media/d" app/build.gradle
+            sed -i "/project(':musikr/d" app/build.gradle
+            sed -i "/decoder-ffmpeg/d" app/build.gradle
+            
+            # Ganti Package Name
             sed -i "s/applicationId [\"'].*[\"']/applicationId \"$PACKAGE\"/g" app/build.gradle
           fi
 
-          # 4. GANTI NAMA APLIKASI
+          # 3. GANTI NAMA APLIKASI
           find app/src/main/res -name "strings.xml" -exec sed -i "s/<string name=\"app_name\">.*<\/string>/<string name=\"app_name\">$NAME<\/string>/g" {} +
           
-          # 5. GANTI ICON (Cari semua ic_launcher dan ganti)
+          # 4. GANTI ICON
           if [ -f "assets/$ICON" ]; then
             find app/src/main/res -name "ic_launcher.png" -exec cp -f "assets/$ICON" {} \;
             find app/src/main/res -name "ic_launcher_round.png" -exec cp -f "assets/$ICON" {} \;
@@ -66,9 +66,9 @@ jobs:
           
           chmod +x gradlew
 
-      - name: Build APK & AAB (Nuclear Mode)
-        # Kita tambahkan flag untuk mengabaikan error compile yang tidak krusial
-        run: ./gradlew :app:assembleDebug :app:bundleDebug --no-daemon -PallowInsecureProtocol=true
+      - name: Build APK & AAB
+        # Kita panggil build secara umum karena settings.gradle sudah sangat sederhana
+        run: ./gradlew assembleDebug bundleDebug --no-daemon
         
       - name: Upload APK
         uses: actions/upload-artifact@v4
