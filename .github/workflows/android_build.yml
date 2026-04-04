@@ -35,7 +35,7 @@ jobs:
 
       - name: Force Reconstruction of Build Files
         run: |
-          # 1. REKONSTRUKSI SETTINGS.GRADLE (Pusat Repository)
+          # 1. REKONSTRUKSI SETTINGS.GRADLE
           cat <<EOF > settings.gradle
           pluginManagement {
               repositories {
@@ -55,7 +55,7 @@ jobs:
           include ':app'
           EOF
 
-          # 2. REKONSTRUKSI ROOT BUILD.GRADLE (Menyediakan Versi Plugin)
+          # 2. REKONSTRUKSI ROOT BUILD.GRADLE (Suntik Hilt & SafeArgs)
           cat <<EOF > build.gradle
           buildscript {
               repositories {
@@ -66,13 +66,14 @@ jobs:
                   classpath 'com.android.tools.build:gradle:8.2.2'
                   classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.22"
                   classpath "androidx.navigation:navigation-safe-args-gradle-plugin:2.7.7"
+                  classpath "com.google.dagger:hilt-android-gradle-plugin:2.50"
               }
           }
           EOF
 
           # 3. BERSIHKAN & PERBAIKI APP BUILD.GRADLE
           if [ -f "app/build.gradle" ]; then
-            # Hapus kaitan ke modul yang hilang
+            # Hapus kaitan ke modul yang hilang (media & musikr)
             sed -i "/project(':media/d" app/build.gradle
             sed -i "/project(':musikr/d" app/build.gradle
             sed -i "/decoder-ffmpeg/d" app/build.gradle
@@ -82,7 +83,7 @@ jobs:
             sed -i "s/applicationId [\"'].*[\"']/applicationId \"$PACKAGE\"/g" app/build.gradle
           fi
 
-          # 4. CUSTOMIZE METADATA (Nama Aplikasi)
+          # 4. CUSTOMIZE METADATA
           NAME="${{ github.event.inputs.app_name }}"
           find app/src/main/res -name "strings.xml" -exec sed -i "s/<string name=\"app_name\">.*<\/string>/<string name=\"app_name\">$NAME<\/string>/g" {} +
           
