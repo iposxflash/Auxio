@@ -37,36 +37,46 @@ jobs:
           PACKAGE="${{ github.event.inputs.package_name }}"
           ICON="${{ github.event.inputs.icon_path }}"
 
-          echo "--- KONFIGURASI BARU ---"
-          echo "Nama Aplikasi: $NAME"
-          echo "Package Name : $PACKAGE"
-          echo "File Icon    : assets/$ICON"
-          echo "-----------------------"
+          echo "--- MEMULAI KUSTOMISASI ---"
 
-          # 2. Ubah Nama Aplikasi di strings.xml
-          # Menggunakan regex yang lebih kuat untuk mencari tag app_name
-          sed -i "s/<string name=\"app_name\">.*<\/string>/<string name=\"app_name\">$NAME<\/string>/g" app/src/main/res/values/strings.xml
+          # 2. FIX ERROR BARIS 22 (Settings.gradle)
+          # Menghapus baris 'apply from' jika file target tidak ditemukan agar build tidak FAILED
+          if [ ! -f "media/core_settings.gradle" ]; then
+            echo "PERINGATAN: media/core_settings.gradle hilang. Membersihkan settings.gradle..."
+            sed -i "/core_settings.gradle/d" settings.gradle
+          fi
+
+          # 3. Ubah Nama Aplikasi di strings.xml
+          # Mencari tag app_name dan menggantinya dengan input dari user
+          if [ -f "app/src/main/res/values/strings.xml" ]; then
+            sed -i "s/<string name=\"app_name\">.*<\/string>/<string name=\"app_name\">$NAME<\/string>/g" app/src/main/res/values/strings.xml
+            echo "Nama aplikasi diubah menjadi: $NAME"
+          fi
           
-          # 3. Ubah Package Name di app/build.gradle
-          sed -i "s/applicationId \"org.oxycblt.auxio\"/applicationId \"$PACKAGE\"/g" app/build.gradle
+          # 4. Ubah Package Name (applicationId) di app/build.gradle
+          if [ -f "app/build.gradle" ]; then
+            sed -i "s/applicationId [\"'].*[\"']/applicationId \"$PACKAGE\"/g" app/build.gradle
+            echo "Package name diubah menjadi: $PACKAGE"
+          fi
           
-          # 4. Ganti Icon di semua resolusi folder res
+          # 5. Ganti Icon Aplikasi
+          # Mengambil file dari folder assets/ dan menimpa icon bawaan di semua resolusi
           if [ -f "assets/$ICON" ]; then
-            echo "Proses mengganti icon..."
+            echo "Mengganti icon menggunakan assets/$ICON..."
             for folder in mipmap-mdpi mipmap-hdpi mipmap-xhdpi mipmap-xxhdpi mipmap-xxxhdpi; do
+              mkdir -p "app/src/main/res/$folder"
               cp -f "assets/$ICON" "app/src/main/res/$folder/ic_launcher.png"
               cp -f "assets/$ICON" "app/src/main/res/$folder/ic_launcher_round.png"
             done
-            echo "Icon berhasil diperbarui di semua folder mipmap."
           else
-            echo "PERINGATAN: assets/$ICON tidak ditemukan. Menggunakan icon bawaan."
+            echo "INFO: assets/$ICON tidak ditemukan. Build dilanjutkan dengan icon default."
           fi
           
-          # 5. Berikan izin eksekusi ke gradlew
+          # 6. Berikan izin eksekusi gradlew
           chmod +x gradlew
 
       - name: Build APK and AAB
-        # assembleDebug = APK, bundleDebug = AAB
+        # Melakukan build dua format sekaligus
         run: ./gradlew assembleDebug bundleDebug --stacktrace
 
       - name: Upload APK Result
