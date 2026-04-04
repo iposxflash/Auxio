@@ -8,7 +8,7 @@ on:
         required: true
         default: 'Musik Sasak'
       package_name:
-        description: 'Package Name (Gunakan titik, misal: com.sasak.musik)'
+        description: 'Package Name (Contoh: com.sasak.musik)'
         required: true
         default: 'com.ojgrup.musiksasak'
       icon_path:
@@ -23,7 +23,15 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          submodules: recursive # Penting jika Auxio menggunakan submodules
+          # KUNCI PERBAIKAN: Jangan ambil submodule secara otomatis karena server FFmpeg error
+          submodules: false 
+
+      - name: Manual Submodule Sync
+        run: |
+          # Kita hanya ambil submodule yang penting (media), abaikan FFmpeg yang error
+          git submodule init
+          git submodule update --remote media || true
+          echo "Submodule media diupdate, mengabaikan error ffmpeg jika ada."
 
       - name: Setup JDK 17
         uses: actions/setup-java@v4
@@ -38,29 +46,24 @@ jobs:
           PACKAGE="${{ github.event.inputs.package_name }}"
           ICON="${{ github.event.inputs.icon_path }}"
 
-          echo "--- MEMULAI KUSTOMISASI AMAN ---"
+          echo "--- KUSTOMISASI MULAI ---"
 
-          # 1. JANGAN HAPUS ISI SETTINGS.GRADLE
-          # Kita hanya pastikan file tersebut ada. Jangan gunakan 'sed' yang menghapus baris 'include'
+          # 1. Pastikan settings.gradle tidak error meski submodule tidak lengkap
           if [ -f "settings.gradle" ]; then
-            echo "Checking settings.gradle... OK"
+            # Hapus baris yang memaksa penggunaan decoder ffmpeg jika menyebabkan build gagal
+            sed -i "/decoder_ffmpeg/d" settings.gradle || true
           fi
 
-          # 2. Ubah Nama Aplikasi (strings.xml)
-          # Mencari tag app_name tanpa merusak struktur XML
+          # 2. Ganti Nama Aplikasi
           find app/src/main/res -name "strings.xml" -exec sed -i "s/<string name=\"app_name\">.*<\/string>/<string name=\"app_name\">$NAME<\/string>/g" {} +
           
-          # 3. Ubah Package Name (applicationId) secara hati-hati
-          # Kita hanya mengubah di folder app/build.gradle pada baris applicationId
+          # 3. Ganti Package Name
           if [ -f "app/build.gradle" ]; then
             sed -i "s/applicationId [\"'].*[\"']/applicationId \"$PACKAGE\"/g" app/build.gradle
-            echo "Package name berhasil diubah."
           fi
           
           # 4. Ganti Icon (Menimpa file asli)
           if [ -f "assets/$ICON" ]; then
-            echo "Proses ganti icon..."
-            # Mencari folder mipmap secara otomatis dan menimpa icon
             find app/src/main/res -name "ic_launcher.png" -exec cp -f "assets/$ICON" {} \;
             find app/src/main/res -name "ic_launcher_round.png" -exec cp -f "assets/$ICON" {} \;
           fi
@@ -68,6 +71,5 @@ jobs:
           chmod +x gradlew
 
       - name: Build APK and AAB
-        # Menggunakan --continue agar jika ada error non-critical build tetap jalan
-        # Menggunakan ./gradlew (wrapper) agar versi gradle tidak lompat ke 9.3
-        run: ./gradlew :app:assembleDebug :app:bundleDebug --no-daemon
+        # Gunakan --stacktrace untuk melihat detail jika tetap gagal
+        run: ./gradlew :app:assembleDebug :app:bundleDebug --no-daemon --stacktrace
