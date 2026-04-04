@@ -35,7 +35,7 @@ jobs:
 
       - name: Force Reconstruction of Build Files
         run: |
-          # 1. REKONSTRUKSI SETTINGS.GRADLE (Pusat Kendali Repository)
+          # 1. REKONSTRUKSI SETTINGS.GRADLE (Pusat Repository)
           cat <<EOF > settings.gradle
           pluginManagement {
               repositories {
@@ -55,7 +55,7 @@ jobs:
           include ':app'
           EOF
 
-          # 2. REKONSTRUKSI ROOT BUILD.GRADLE (Hanya untuk Classpath)
+          # 2. REKONSTRUKSI ROOT BUILD.GRADLE (Menyediakan Versi Plugin)
           cat <<EOF > build.gradle
           buildscript {
               repositories {
@@ -65,13 +65,14 @@ jobs:
               dependencies {
                   classpath 'com.android.tools.build:gradle:8.2.2'
                   classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.22"
+                  classpath "androidx.navigation:navigation-safe-args-gradle-plugin:2.7.7"
               }
           }
-          // Kita kosongkan allprojects agar tidak bentrok dengan settings.gradle
           EOF
 
-          # 3. BERSIHKAN APP BUILD.GRADLE
+          # 3. BERSIHKAN & PERBAIKI APP BUILD.GRADLE
           if [ -f "app/build.gradle" ]; then
+            # Hapus kaitan ke modul yang hilang
             sed -i "/project(':media/d" app/build.gradle
             sed -i "/project(':musikr/d" app/build.gradle
             sed -i "/decoder-ffmpeg/d" app/build.gradle
