@@ -35,8 +35,7 @@ jobs:
 
       - name: Force Reconstruction of Build Files
         run: |
-          # 1. RESET SETTINGS.GRADLE TOTAL
-          # Menambahkan dependencyResolutionManagement agar Gradle tahu harus cari plugin di mana
+          # 1. REKONSTRUKSI SETTINGS.GRADLE (Pusat Kendali Repository)
           cat <<EOF > settings.gradle
           pluginManagement {
               repositories {
@@ -46,7 +45,7 @@ jobs:
               }
           }
           dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
               repositories {
                   google()
                   mavenCentral()
@@ -56,8 +55,7 @@ jobs:
           include ':app'
           EOF
 
-          # 2. FIX ROOT BUILD.GRADLE (Solusi Plugin Not Found)
-          # Kita timpa build.gradle utama agar menggunakan versi 8.2.2 dan repo yang benar
+          # 2. REKONSTRUKSI ROOT BUILD.GRADLE (Hanya untuk Classpath)
           cat <<EOF > build.gradle
           buildscript {
               repositories {
@@ -69,17 +67,11 @@ jobs:
                   classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.22"
               }
           }
-          allprojects {
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
+          // Kita kosongkan allprojects agar tidak bentrok dengan settings.gradle
           EOF
 
-          # 3. CLEAN APP BUILD.GRADLE
+          # 3. BERSIHKAN APP BUILD.GRADLE
           if [ -f "app/build.gradle" ]; then
-            # Hapus baris plugins yang bermasalah dan dependensi modul yang hilang
             sed -i "/project(':media/d" app/build.gradle
             sed -i "/project(':musikr/d" app/build.gradle
             sed -i "/decoder-ffmpeg/d" app/build.gradle
@@ -89,7 +81,7 @@ jobs:
             sed -i "s/applicationId [\"'].*[\"']/applicationId \"$PACKAGE\"/g" app/build.gradle
           fi
 
-          # 4. CUSTOMIZE METADATA
+          # 4. CUSTOMIZE METADATA (Nama Aplikasi)
           NAME="${{ github.event.inputs.app_name }}"
           find app/src/main/res -name "strings.xml" -exec sed -i "s/<string name=\"app_name\">.*<\/string>/<string name=\"app_name\">$NAME<\/string>/g" {} +
           
@@ -103,8 +95,7 @@ jobs:
           chmod +x gradlew
 
       - name: Build APK
-        # Kita gunakan --stacktrace untuk berjaga-jaga
-        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+        run: ./gradlew :app:assembleDebug --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
