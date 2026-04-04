@@ -8,11 +8,11 @@ on:
         required: true
         default: 'Musik Sasak'
       package_name:
-        description: 'Package Name (Contoh: com.sasak.musik)'
+        description: 'Package Name'
         required: true
         default: 'com.ojgrup.musiksasak'
       icon_path:
-        description: 'Nama file icon di folder assets (misal: icon.png)'
+        description: 'Nama file icon di assets/'
         required: false
         default: 'icon.png'
 
@@ -23,15 +23,12 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          # KUNCI PERBAIKAN: Jangan ambil submodule secara otomatis karena server FFmpeg error
-          submodules: false 
+          submodules: false # Kita tangani secara manual agar tidak macet
 
-      - name: Manual Submodule Sync
+      - name: Manual Submodule Prep
         run: |
-          # Kita hanya ambil submodule yang penting (media), abaikan FFmpeg yang error
           git submodule init
           git submodule update --remote media || true
-          echo "Submodule media diupdate, mengabaikan error ffmpeg jika ada."
 
       - name: Setup JDK 17
         uses: actions/setup-java@v4
@@ -40,29 +37,31 @@ jobs:
           distribution: 'temurin'
           cache: 'gradle'
 
-      - name: Customize App Metadata
+      - name: Customize and Fix Build
         run: |
           NAME="${{ github.event.inputs.app_name }}"
           PACKAGE="${{ github.event.inputs.package_name }}"
           ICON="${{ github.event.inputs.icon_path }}"
 
-          echo "--- KUSTOMISASI MULAI ---"
-
-          # 1. Pastikan settings.gradle tidak error meski submodule tidak lengkap
+          # 1. DISABLE FFMPEG (Kunci Perbaikan Error 127)
+          # Menghapus baris yang memanggil decoder ffmpeg di settings.gradle
           if [ -f "settings.gradle" ]; then
-            # Hapus baris yang memaksa penggunaan decoder ffmpeg jika menyebabkan build gagal
-            sed -i "/decoder_ffmpeg/d" settings.gradle || true
+            sed -i "/decoder-ffmpeg/d" settings.gradle
+            sed -i "/decoder_ffmpeg/d" settings.gradle
           fi
-
-          # 2. Ganti Nama Aplikasi
-          find app/src/main/res -name "strings.xml" -exec sed -i "s/<string name=\"app_name\">.*<\/string>/<string name=\"app_name\">$NAME<\/string>/g" {} +
           
-          # 3. Ganti Package Name
+          # Menghapus dependensi ffmpeg di app/build.gradle agar tidak dicari saat compile
           if [ -f "app/build.gradle" ]; then
+            sed -i "/decoder-ffmpeg/d" app/build.gradle
+            sed -i "/decoder_ffmpeg/d" app/build.gradle
+            # Ganti Package Name
             sed -i "s/applicationId [\"'].*[\"']/applicationId \"$PACKAGE\"/g" app/build.gradle
           fi
+
+          # 2. Ubah Nama Aplikasi
+          find app/src/main/res -name "strings.xml" -exec sed -i "s/<string name=\"app_name\">.*<\/string>/<string name=\"app_name\">$NAME<\/string>/g" {} +
           
-          # 4. Ganti Icon (Menimpa file asli)
+          # 3. Ganti Icon
           if [ -f "assets/$ICON" ]; then
             find app/src/main/res -name "ic_launcher.png" -exec cp -f "assets/$ICON" {} \;
             find app/src/main/res -name "ic_launcher_round.png" -exec cp -f "assets/$ICON" {} \;
@@ -71,5 +70,17 @@ jobs:
           chmod +x gradlew
 
       - name: Build APK and AAB
-        # Gunakan --stacktrace untuk melihat detail jika tetap gagal
-        run: ./gradlew :app:assembleDebug :app:bundleDebug --no-daemon --stacktrace
+        # Membangun :app saja dan mengecualikan task assembleFfmpeg yang rusak
+        run: ./gradlew :app:assembleDebug :app:bundleDebug -x :media-lib-decoder-ffmpeg:assembleFfmpeg --no-daemon
+        
+      - name: Upload APK Result
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.inputs.app_name }}-APK
+          path: app/build/outputs/apk/debug/*.apk
+
+      - name: Upload AAB Result
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.inputs.app_name }}-AAB
+          path: app/build/outputs/bundle/debug/*.aab
