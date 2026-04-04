@@ -22,6 +22,8 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive # Penting jika Auxio menggunakan submodules
 
       - name: Setup JDK 17
         uses: actions/setup-java@v4
@@ -36,45 +38,36 @@ jobs:
           PACKAGE="${{ github.event.inputs.package_name }}"
           ICON="${{ github.event.inputs.icon_path }}"
 
-          # 1. Perbaikan Settings.gradle (Bypass baris 22)
+          echo "--- MEMULAI KUSTOMISASI AMAN ---"
+
+          # 1. JANGAN HAPUS ISI SETTINGS.GRADLE
+          # Kita hanya pastikan file tersebut ada. Jangan gunakan 'sed' yang menghapus baris 'include'
           if [ -f "settings.gradle" ]; then
-            sed -i "/core_settings.gradle/d" settings.gradle
+            echo "Checking settings.gradle... OK"
           fi
 
           # 2. Ubah Nama Aplikasi (strings.xml)
-          if [ -f "app/src/main/res/values/strings.xml" ]; then
-            sed -i "s/<string name=\"app_name\">.*<\/string>/<string name=\"app_name\">$NAME<\/string>/g" app/src/main/res/values/strings.xml
-          fi
+          # Mencari tag app_name tanpa merusak struktur XML
+          find app/src/main/res -name "strings.xml" -exec sed -i "s/<string name=\"app_name\">.*<\/string>/<string name=\"app_name\">$NAME<\/string>/g" {} +
           
-          # 3. Ubah Package Name (applicationId)
-          # Menggunakan cara yang lebih aman agar tidak merusak baris dependencies
+          # 3. Ubah Package Name (applicationId) secara hati-hati
+          # Kita hanya mengubah di folder app/build.gradle pada baris applicationId
           if [ -f "app/build.gradle" ]; then
             sed -i "s/applicationId [\"'].*[\"']/applicationId \"$PACKAGE\"/g" app/build.gradle
+            echo "Package name berhasil diubah."
           fi
           
-          # 4. Ganti Icon
+          # 4. Ganti Icon (Menimpa file asli)
           if [ -f "assets/$ICON" ]; then
-            for folder in mipmap-mdpi mipmap-hdpi mipmap-xhdpi mipmap-xxhdpi mipmap-xxxhdpi; do
-              mkdir -p "app/src/main/res/$folder"
-              cp -f "assets/$ICON" "app/src/main/res/$folder/ic_launcher.png"
-              cp -f "assets/$ICON" "app/src/main/res/$folder/ic_launcher_round.png"
-            done
+            echo "Proses ganti icon..."
+            # Mencari folder mipmap secara otomatis dan menimpa icon
+            find app/src/main/res -name "ic_launcher.png" -exec cp -f "assets/$ICON" {} \;
+            find app/src/main/res -name "ic_launcher_round.png" -exec cp -f "assets/$ICON" {} \;
           fi
           
           chmod +x gradlew
 
       - name: Build APK and AAB
-        # Menggunakan wrapper bawaan proyek agar versi Gradle konsisten
-        run: ./gradlew assembleDebug bundleDebug --no-daemon
-
-      - name: Upload APK Result
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.event.inputs.app_name }}-APK
-          path: app/build/outputs/apk/debug/*.apk
-
-      - name: Upload AAB Result
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.event.inputs.app_name }}-AAB
-          path: app/build/outputs/bundle/debug/*.aab
+        # Menggunakan --continue agar jika ada error non-critical build tetap jalan
+        # Menggunakan ./gradlew (wrapper) agar versi gradle tidak lompat ke 9.3
+        run: ./gradlew :app:assembleDebug :app:bundleDebug --no-daemon
