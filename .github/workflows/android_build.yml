@@ -1,4 +1,4 @@
-name: Build Custom Auxio (Final Solution)
+name: Build Custom Auxio (Absolute Fix)
 
 on:
   workflow_dispatch:
@@ -23,7 +23,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          submodules: false # Matikan submodule agar tidak error git 128
+          submodules: false
           fetch-depth: 1
 
       - name: Setup JDK 17
@@ -33,24 +33,53 @@ jobs:
           distribution: 'temurin'
           cache: 'gradle'
 
-      - name: Force Recreate Settings.gradle
+      - name: Force Reconstruction of Build Files
         run: |
-          # Hapus file lama yang bermasalah
-          rm -f settings.gradle
-          
-          # Buat file baru dari nol (Tanpa baris 22 yang error)
-          echo "rootProject.name = 'Auxio'" > settings.gradle
-          echo "include ':app'" >> settings.gradle
-          
-          echo "File settings.gradle telah dibuat ulang dengan sukses."
+          # 1. RESET SETTINGS.GRADLE TOTAL
+          # Menambahkan dependencyResolutionManagement agar Gradle tahu harus cari plugin di mana
+          cat <<EOF > settings.gradle
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = 'Auxio'
+          include ':app'
+          EOF
 
-      - name: Deep Clean App Dependencies
-        run: |
-          # 1. Ganti versi plugin ke 8.2.2 agar tersedia di server Google
-          find . -name "build.gradle*" -exec sed -i "s/9.1.0/8.2.2/g" {} +
-          
-          # 2. Bersihkan app/build.gradle dari dependensi modul yang sudah kita buang
+          # 2. FIX ROOT BUILD.GRADLE (Solusi Plugin Not Found)
+          # Kita timpa build.gradle utama agar menggunakan versi 8.2.2 dan repo yang benar
+          cat <<EOF > build.gradle
+          buildscript {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+              dependencies {
+                  classpath 'com.android.tools.build:gradle:8.2.2'
+                  classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.22"
+              }
+          }
+          allprojects {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          EOF
+
+          # 3. CLEAN APP BUILD.GRADLE
           if [ -f "app/build.gradle" ]; then
+            # Hapus baris plugins yang bermasalah dan dependensi modul yang hilang
             sed -i "/project(':media/d" app/build.gradle
             sed -i "/project(':musikr/d" app/build.gradle
             sed -i "/decoder-ffmpeg/d" app/build.gradle
@@ -60,11 +89,11 @@ jobs:
             sed -i "s/applicationId [\"'].*[\"']/applicationId \"$PACKAGE\"/g" app/build.gradle
           fi
 
-          # 3. Ganti Nama Aplikasi
+          # 4. CUSTOMIZE METADATA
           NAME="${{ github.event.inputs.app_name }}"
           find app/src/main/res -name "strings.xml" -exec sed -i "s/<string name=\"app_name\">.*<\/string>/<string name=\"app_name\">$NAME<\/string>/g" {} +
           
-          # 4. Ganti Icon
+          # 5. GANTI ICON
           ICON="${{ github.event.inputs.icon_path }}"
           if [ -f "assets/$ICON" ]; then
             find app/src/main/res -name "ic_launcher.png" -exec cp -f "assets/$ICON" {} \;
@@ -73,9 +102,9 @@ jobs:
           
           chmod +x gradlew
 
-      - name: Build APK & AAB
-        # Build hanya modul :app karena modul lain sudah kita hilangkan
-        run: ./gradlew :app:assembleDebug :app:bundleDebug --no-daemon
+      - name: Build APK
+        # Kita gunakan --stacktrace untuk berjaga-jaga
+        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
