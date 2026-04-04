@@ -1,4 +1,4 @@
-name: Build Custom Auxio (Final Fix)
+name: Build Custom Auxio (Final Solution)
 
 on:
   workflow_dispatch:
@@ -23,7 +23,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          submodules: false 
+          submodules: recursive # Kita coba ambil lagi secara aman
 
       - name: Setup JDK 17
         uses: actions/setup-java@v4
@@ -32,32 +32,32 @@ jobs:
           distribution: 'temurin'
           cache: 'gradle'
 
-      - name: Force Clean & Reset Settings
+      - name: Fix Dependencies and Versions
         run: |
+          # 1. FIX PLUGIN VERSION (Solusi Error Plugin 9.1.0)
+          # Kita paksa turunkan ke versi 8.2.2 yang stabil di server Google
+          find . -name "build.gradle" -exec sed -i "s/9.1.0/8.2.2/g" {} +
+          find . -name "build.gradle.kts" -exec sed -i "s/9.1.0/8.2.2/g" {} +
+
+          # 2. FIX SETTINGS.GRADLE
+          # Jika file media/core_settings.gradle hilang, kita matikan baris pemanggilnya
+          if [ ! -f "media/core_settings.gradle" ]; then
+            sed -i "/core_settings.gradle/d" settings.gradle || true
+          fi
+
+          # 3. CUSTOMIZE METADATA
           NAME="${{ github.event.inputs.app_name }}"
           PACKAGE="${{ github.event.inputs.package_name }}"
           ICON="${{ github.event.inputs.icon_path }}"
 
-          # 1. RESET TOTAL SETTINGS.GRADLE (Menghilangkan error baris 22)
-          # Kita buat file settings.gradle baru yang hanya berisi folder app
-          echo "rootProject.name = 'Auxio'" > settings.gradle
-          echo "include ':app'" >> settings.gradle
-          echo "Settings.gradle has been reset to minimal."
-
-          # 2. BERSIHKAN DEPENDENSI DI APP/BUILD.GRADLE
-          # Karena modul lain dibuang, kita harus hapus panggilannya di dalam app
+          # Ganti Nama App
+          find app/src/main/res -name "strings.xml" -exec sed -i "s/<string name=\"app_name\">.*<\/string>/<string name=\"app_name\">$NAME<\/string>/g" {} +
+          
+          # Ganti Package Name
           if [ -f "app/build.gradle" ]; then
-            sed -i "/project(':media/d" app/build.gradle
-            sed -i "/project(':musikr/d" app/build.gradle
-            sed -i "/decoder-ffmpeg/d" app/build.gradle
-            
-            # Ganti Package Name
             sed -i "s/applicationId [\"'].*[\"']/applicationId \"$PACKAGE\"/g" app/build.gradle
           fi
 
-          # 3. GANTI NAMA APLIKASI
-          find app/src/main/res -name "strings.xml" -exec sed -i "s/<string name=\"app_name\">.*<\/string>/<string name=\"app_name\">$NAME<\/string>/g" {} +
-          
           # 4. GANTI ICON
           if [ -f "assets/$ICON" ]; then
             find app/src/main/res -name "ic_launcher.png" -exec cp -f "assets/$ICON" {} \;
@@ -67,9 +67,9 @@ jobs:
           chmod +x gradlew
 
       - name: Build APK & AAB
-        # Kita panggil build secara umum karena settings.gradle sudah sangat sederhana
+        # Gunakan --no-daemon dan paksa gunakan repositori Google
         run: ./gradlew assembleDebug bundleDebug --no-daemon
-        
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
