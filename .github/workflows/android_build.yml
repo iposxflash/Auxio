@@ -4,15 +4,15 @@ on:
   workflow_dispatch:
     inputs:
       app_name:
-        description: 'Nama Aplikasi (Contoh: Musik Sasak Offline)'
+        description: 'Nama Aplikasi'
         required: true
         default: 'Musik Sasak'
       package_name:
-        description: 'Package Name (Contoh: com.ojgrup.musiksasak)'
+        description: 'Package Name (Gunakan titik, misal: com.sasak.musik)'
         required: true
         default: 'com.ojgrup.musiksasak'
       icon_path:
-        description: 'Nama file icon di folder assets (Contoh: icon.png)'
+        description: 'Nama file icon di folder assets (misal: icon.png)'
         required: false
         default: 'icon.png'
 
@@ -32,52 +32,40 @@ jobs:
 
       - name: Customize App Metadata
         run: |
-          # 1. Ambil data dari Form Input
           NAME="${{ github.event.inputs.app_name }}"
           PACKAGE="${{ github.event.inputs.package_name }}"
           ICON="${{ github.event.inputs.icon_path }}"
 
-          echo "--- MEMULAI KUSTOMISASI ---"
-
-          # 2. FIX ERROR BARIS 22 (Settings.gradle)
-          # Menghapus baris 'apply from' jika file target tidak ditemukan agar build tidak FAILED
-          if [ ! -f "media/core_settings.gradle" ]; then
-            echo "PERINGATAN: media/core_settings.gradle hilang. Membersihkan settings.gradle..."
+          # 1. Perbaikan Settings.gradle (Bypass baris 22)
+          if [ -f "settings.gradle" ]; then
             sed -i "/core_settings.gradle/d" settings.gradle
           fi
 
-          # 3. Ubah Nama Aplikasi di strings.xml
-          # Mencari tag app_name dan menggantinya dengan input dari user
+          # 2. Ubah Nama Aplikasi (strings.xml)
           if [ -f "app/src/main/res/values/strings.xml" ]; then
             sed -i "s/<string name=\"app_name\">.*<\/string>/<string name=\"app_name\">$NAME<\/string>/g" app/src/main/res/values/strings.xml
-            echo "Nama aplikasi diubah menjadi: $NAME"
           fi
           
-          # 4. Ubah Package Name (applicationId) di app/build.gradle
+          # 3. Ubah Package Name (applicationId)
+          # Menggunakan cara yang lebih aman agar tidak merusak baris dependencies
           if [ -f "app/build.gradle" ]; then
             sed -i "s/applicationId [\"'].*[\"']/applicationId \"$PACKAGE\"/g" app/build.gradle
-            echo "Package name diubah menjadi: $PACKAGE"
           fi
           
-          # 5. Ganti Icon Aplikasi
-          # Mengambil file dari folder assets/ dan menimpa icon bawaan di semua resolusi
+          # 4. Ganti Icon
           if [ -f "assets/$ICON" ]; then
-            echo "Mengganti icon menggunakan assets/$ICON..."
             for folder in mipmap-mdpi mipmap-hdpi mipmap-xhdpi mipmap-xxhdpi mipmap-xxxhdpi; do
               mkdir -p "app/src/main/res/$folder"
               cp -f "assets/$ICON" "app/src/main/res/$folder/ic_launcher.png"
               cp -f "assets/$ICON" "app/src/main/res/$folder/ic_launcher_round.png"
             done
-          else
-            echo "INFO: assets/$ICON tidak ditemukan. Build dilanjutkan dengan icon default."
           fi
           
-          # 6. Berikan izin eksekusi gradlew
           chmod +x gradlew
 
       - name: Build APK and AAB
-        # Melakukan build dua format sekaligus
-        run: ./gradlew assembleDebug bundleDebug --stacktrace
+        # Menggunakan wrapper bawaan proyek agar versi Gradle konsisten
+        run: ./gradlew assembleDebug bundleDebug --no-daemon
 
       - name: Upload APK Result
         uses: actions/upload-artifact@v4
